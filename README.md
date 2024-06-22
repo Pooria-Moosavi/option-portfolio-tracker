@@ -27,7 +27,7 @@ cd option-portfolio-tracker
 ```
 بسته‌های مورد نیاز را نصب کنید:
 ```
-pip install pandas numpy jdatetime requests fake_useragent PyQt5
+pip install pandas numpy jdatetime requests fake_useragent PyQt5 openpyxl
 ```
 مطمئن شوید که یک فایل اکسل با نام opt hist.xlsx در دایرکتوری پروژه با داده‌های تاریخی لازم دارید.
 
