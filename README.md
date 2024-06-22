@@ -1,10 +1,9 @@
 # option-portfolio-tracker
-Option Portfolio Tracker For Tehran Exchange Market Option Traders
+Covered Call Portfolio Tracker Portfolio Tracker For Tehran Exchange Market Option Traders
 option-portfolio-tracker
-Option Portfolio Tracker For Tehran Exchange Market Option Traders
 
 ردیاب پرتفوی اختیار معامله
-این پروژه یک برنامه پایتون است که داده‌های زنده بازار سهام را نظارت کرده و با استفاده از رابط کاربری PyQt5 نمایش می‌دهد. داده های زنده گرفته شده برای نمایش معیارهای مختلف از جمله گزینه‌های خرید، سرمایه بازار و غیره پردازش می‌شوند.
+این پروژه یک برنامه پایتون جهت بررسی وضعیت کاوردکال های خریداری شده است که داده‌های زنده بازار سهام را نظارت کرده و با استفاده از رابط کاربری PyQt5 نمایش می‌دهد. داده های زنده گرفته شده برای نمایش معیارهای مختلف از جمله گزینه‌های خرید، سرمایه بازار و غیره پردازش می‌شوند.
 
 ویژگی‌ها
 دریافت و پردازش داده‌های بازار سهام بصورت زنده
