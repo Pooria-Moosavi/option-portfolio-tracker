@@ -14,22 +14,33 @@ import time
 def days_difference(start_persian_date, end_persian_date):
     if start_persian_date and end_persian_date:
         try:
-            if len(start_persian_date) == 8:
+            # Processing start_persian_date
+            if len(start_persian_date) == 8 and '/' not in start_persian_date:
+                start_jalali_date = jdatetime.date(int(start_persian_date[:4]), int(start_persian_date[4:6]), int(start_persian_date[6:]))
+            elif len(start_persian_date) == 6 and '/' not in start_persian_date:
+                start_jalali_date = jdatetime.date(int(start_persian_date[:2]) + 1400, int(start_persian_date[2:4]), int(start_persian_date[4:]))
+            elif len(start_persian_date) == 8:
                 start_jalali_date = jdatetime.date(int(start_persian_date[:2]) + 1400, int(start_persian_date[3:5]), int(start_persian_date[6:]))
             elif len(start_persian_date) == 10:
                 start_jalali_date = jdatetime.date(int(start_persian_date[:4]), int(start_persian_date[5:7]), int(start_persian_date[8:]))
             else:
                 print("Invalid start date format.")
                 return None
-
-            if len(end_persian_date) == 8:
+            
+            # Processing end_persian_date
+            if len(end_persian_date) == 8 and '/' not in end_persian_date:
+                end_jalali_date = jdatetime.date(int(end_persian_date[:4]), int(end_persian_date[4:6]), int(end_persian_date[6:]))
+            elif len(end_persian_date) == 6 and '/' not in end_persian_date:
+                end_jalali_date = jdatetime.date(int(end_persian_date[:2]) + 1400, int(end_persian_date[2:4]), int(end_persian_date[4:]))
+            elif len(end_persian_date) == 8:
                 end_jalali_date = jdatetime.date(int(end_persian_date[:2]) + 1400, int(end_persian_date[3:5]), int(end_persian_date[6:]))
             elif len(end_persian_date) == 10:
                 end_jalali_date = jdatetime.date(int(end_persian_date[:4]), int(end_persian_date[5:7]), int(end_persian_date[8:]))
             else:
                 print("Invalid end date format.")
                 return None
-
+            
+            # Calculating difference
             difference = end_jalali_date - start_jalali_date
             return abs(difference.days)
         except ValueError:
@@ -38,6 +49,11 @@ def days_difference(start_persian_date, end_persian_date):
     else:
         print("Date conversion failed.")
         return None
+
+def clean_string(s):
+    if isinstance(s, str):
+        return unicodedata.normalize('NFKC', s).strip()
+    return s
 
 # Worker thread to fetch and process data
 class DataFetcher(QThread):
@@ -61,15 +77,15 @@ class DataFetcher(QThread):
 
     def process_data(self, main_text):
         parts = main_text.split('@')
+        parts = main_text.split('@')
         if len(parts) > 3 and len(parts[2]) > 2:
-            # Market Data
             Mkt_df = pd.DataFrame(parts[2].split(';')).iloc[:, 0].str.split(",", expand=True).iloc[:, :23]
             Mkt_df.columns = [
                 'WEB-ID', 'Ticker-Code', 'Ticker', 'Name', 'Time', 'Open', 'Final', 'Close', 'No', 'Volume', 'Value',
                 'Low', 'High', 'Y-Final', 'EPS', 'Base-Vol', 'Unknown1', 'Unknown2', 'Sector', 'Day_UL', 'Day_LL',
                 'Share-No', 'Mkt-ID'
             ]
-            Mkt_df = Mkt_df[Mkt_df['Mkt-ID'].isin(['311', '312', '300', '303', '305'])]
+
             Mkt_df['Market'] = Mkt_df['Mkt-ID'].map({
                 '300': 'بورس', '303': 'فرابورس', '305': 'صندوق', '311': 'اختیار خرید', '312': 'اختیار فروش'
             })
@@ -86,7 +102,6 @@ class DataFetcher(QThread):
             Mkt_df['WEB-ID'] = Mkt_df['WEB-ID'].str.strip()
             Mkt_df = Mkt_df.set_index('WEB-ID')
 
-            # Order Book Data
             OB_df = pd.DataFrame(parts[3].split(';')).iloc[:, 0].str.split(",", expand=True)
             OB_df.columns = ['WEB-ID', 'OB-Depth', 'Sell-No', 'Buy-No', 'Buy-Price', 'Sell-Price', 'Buy-Vol', 'Sell-Vol']
             OB_df = OB_df[OB_df['OB-Depth'] == '1'].drop(columns=['OB-Depth']).set_index('WEB-ID')
@@ -99,10 +114,11 @@ class DataFetcher(QThread):
             Mkt_df['BQPC'] = np.where((Mkt_df['BQ-Value'] != 0) & (Mkt_df['Buy-No'] != 0), (Mkt_df['BQ-Value'] / Mkt_df['Buy-No']).round(), 0)
             Mkt_df['SQPC'] = np.where((Mkt_df['SQ-Value'] != 0) & (Mkt_df['Sell-No'] != 0), (Mkt_df['SQ-Value'] / Mkt_df['Sell-No']).round(), 0)
 
-            # Call Options Data
             call = Mkt_df[Mkt_df['Name'].str.startswith('اختیارخ')].copy()
             call[['Option Name', 'Strike Price', 'Strike Date']] = call['Name'].str.split('-', expand=True)
             call['Und Asset'] = call['Option Name'].str.replace('اختیارخ', '').str.strip()
+            call['Und Asset'] = call['Und Asset'].apply(lambda x: x + ' اهرم' if x == 'نارنج' else x)
+            call['Und Asset'] = call['Und Asset'].apply(lambda x: x.replace('فارماكیان', 'فارما کیان') if 'فارماكیان' in x else x)
             call['Days Remaining'] = call['Strike Date'].apply(lambda x: days_difference(jdatetime.date.today().strftime('%Y/%m/%d'), x))
             numeric_cols = ['Strike Price', 'Sell-Price', 'Buy-Price']
             call[numeric_cols] = call[numeric_cols].apply(pd.to_numeric, errors='coerce')
