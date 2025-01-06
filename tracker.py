@@ -1,16 +1,17 @@
-import pandas as pd
-import numpy as np
-import jdatetime
+import sys
 import requests
-from fake_useragent import UserAgent
+import numpy as np
 import datetime
-from PyQt5.QtWidgets import QApplication, QMainWindow, QTableView, QVBoxLayout, QWidget, QLabel
+import time
+import pandas as pd
+from persiantools.jdatetime import JalaliDate
+from fake_useragent import UserAgent
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTableView, QVBoxLayout, QWidget, QLabel, QComboBox, QSplitter, QHBoxLayout
 from PyQt5.QtCore import QAbstractTableModel, Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QColor, QBrush
-import sys
-import time
+import jdatetime
+import unicodedata
 
-# Calculate the difference in days between two Persian dates
 def days_difference(start_persian_date, end_persian_date):
     if start_persian_date and end_persian_date:
         try:
@@ -50,6 +51,7 @@ def days_difference(start_persian_date, end_persian_date):
         print("Date conversion failed.")
         return None
 
+
 def clean_string(s):
     if isinstance(s, str):
         return unicodedata.normalize('NFKC', s).strip()
@@ -76,7 +78,6 @@ class DataFetcher(QThread):
             return None
 
     def process_data(self, main_text):
-        parts = main_text.split('@')
         parts = main_text.split('@')
         if len(parts) > 3 and len(parts[2]) > 2:
             Mkt_df = pd.DataFrame(parts[2].split(';')).iloc[:, 0].str.split(",", expand=True).iloc[:, :23]
@@ -119,19 +120,35 @@ class DataFetcher(QThread):
             call['Und Asset'] = call['Option Name'].str.replace('اختیارخ', '').str.strip()
             call['Und Asset'] = call['Und Asset'].apply(lambda x: x + ' اهرم' if x == 'نارنج' else x)
             call['Und Asset'] = call['Und Asset'].apply(lambda x: x.replace('فارماكیان', 'فارما کیان') if 'فارماكیان' in x else x)
-            call['Days Remaining'] = call['Strike Date'].apply(lambda x: days_difference(jdatetime.date.today().strftime('%Y/%m/%d'), x))
+            call['Days Remaining'] = call['Strike Date'].apply(lambda x: days_difference(JalaliDate.today().strftime('%Y/%m/%d'), x))
             numeric_cols = ['Strike Price', 'Sell-Price', 'Buy-Price']
             call[numeric_cols] = call[numeric_cols].apply(pd.to_numeric, errors='coerce')
+            
+            call['Und Asset'] = call['Und Asset'].apply(clean_string)
+            call['Ticker'] = call['Ticker'].apply(clean_string)
+            Mkt_df['Ticker'] = Mkt_df['Ticker'].apply(clean_string)
+            
+            # Create a dictionary to map 'Ticker' to 'Sell-Price'
+            und_asset_sell = Mkt_df.set_index('Ticker')['Sell-Price'].to_dict()
+            und_asset_buy = Mkt_df.set_index('Ticker')['Buy-Price'].to_dict()
+            und_asset_close = Mkt_df.set_index('Ticker')['Close'].to_dict()
+            
+            # Map 'Und Asset' to 'Sell-Price' from Mkt_df
+            call['Und Asset Sell-Price'] = call['Und Asset'].map(und_asset_sell)
+            call['Und Asset Sell-Price'] = pd.to_numeric(call['Und Asset Sell-Price'], errors='coerce').fillna(0).astype(int)
+            call['Und Asset Buy-Price'] = call['Und Asset'].map(und_asset_buy)
+            call['Und Asset Buy-Price'] = pd.to_numeric(call['Und Asset Buy-Price'], errors='coerce').fillna(0).astype(int)
+            call['Und Asset Close'] = call['Und Asset'].map(und_asset_close)
+            call['Und Asset Close'] = pd.to_numeric(call['Und Asset Close'], errors='coerce').fillna(0).astype(int)
 
-            call['Und Asset Last'] = call['Und Asset'].apply(lambda x: Mkt_df.at[Mkt_df[Mkt_df['Ticker'] == x].index[0], 'Close'])
-            call['Debit'] = call['Und Asset Last'] - call['Sell-Price']
+            call['Debit'] = call['Und Asset Close'] - call['Sell-Price']
             call['Return'] = ((call['Strike Price'] - call['Debit']) / call['Debit']).round(4)
             call['Monthly Return'] = (np.power((1 + call['Return']), (30 / call['Days Remaining'])) - 1).round(4)
             call['YTM Return'] = (np.power((1 + call['Return']), (365 / call['Days Remaining'])) - 1).round(4)
-            call['OTM Cov Call'] = (call['Buy-Price'] / call['Und Asset Last']).round(4)
+            call['OTM Cov Call'] = (call['Buy-Price'] / call['Und Asset Close']).round(4)
             call['Monthly Return'].fillna(-1, inplace=True)
             call['I/O'] = np.select(
-                [(call['Strike Price'] > call['Und Asset Last']), (call['Strike Price'] == call['Und Asset Last'])],
+                [(call['Strike Price'] > call['Und Asset Close']), (call['Strike Price'] == call['Und Asset Close'])],
                 ['OTM', 'ATM'], default='ITM'
             )
 
@@ -156,7 +173,7 @@ class DataFetcher(QThread):
             opt_hist = opt_hist.drop(['Strike Date_x'], axis=1).rename(columns={'Strike Date_y': 'Strike Date'})
 
             opt_hist = opt_hist[['Ticker', 'Und Asset', 'Strike Price', 'Strike Date', 'Num', 'Premium', 'Und Asset Price', 'Days Remaining', 'Pos Date',
-                                 'Pos Debit', 'Pos OTM Cov Call', 'Buy-Price', 'Und Asset Last', 'Debit', 'Pos Return', 'Pos Monthly Return',
+                                 'Pos Debit', 'Pos OTM Cov Call', 'Buy-Price', 'Und Asset Close', 'Debit', 'Pos Return', 'Pos Monthly Return',
                                  'Pos YTM Return', 'Today Return', 'Today Monthly Return', 'Today YTM Return', 'Return', 'Monthly Return',
                                  'YTM Return', 'Pos Days Remaining', 'Capital', 'Profit', 'Signal']]
             opt_hist = opt_hist.rename(columns={'Buy-Price': 'Call Premium Now', 'Und Asset Last': 'Und Asset Buy-Price'})
